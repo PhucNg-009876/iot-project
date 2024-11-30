@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <script src="https://code.jquery.com/jquery-3.6.1.min.js" type="text/javascript"></script>
+    <title>Điều khiển đèn LED qua MQTT</title>
+</head>
+
+<body>
+    <center>
+        <b>
+            <h2>Điều khiển đèn LED và hiển thị thông tin</h2>
+        </b>
+    </center>
+
+    <!-- Các trường nhập liệu cho thời gian bật/tắt đèn LED -->
+    <div>
+        <h3>Điều khiển thời gian bật/tắt đèn LED</h3>
+        <form id="ledControlForm">
+            <label for="led1State">LED1 (Đỏ) - Chọn trạng thái:</label>
+            <select id="led1State" name="led1State">
+                <option value="on">Bật</option>
+                <option value="off">Tắt</option>
+            </select>
+            <br><br>
+            <label for="led2State">LED2 (Vàng) - Chọn trạng thái:</label>
+            <select id="led2State" name="led2State">
+                <option value="on">Bật</option>
+                <option value="off">Tắt</option>
+            </select>
+            <br><br>
+            <label for="led3State">LED3 (Xanh) - Chọn trạng thái:</label>
+            <select id="led3State" name="led3State">
+                <option value="on">Bật</option>
+                <option value="off">Tắt</option>
+            </select>
+            <br><br>
+            <button type="button" onclick="sendLedStates()">Gửi trạng thái LED</button>
+        </form>
+    </div>
+
+    <div id="response"></div>
+
+    <script>
+        const client = new Paho.MQTT.Client("broker.emqx.io", Number(8083), "clientId");
+
+        let isConnected = false;  // Biến để theo dõi trạng thái kết nối
+
+        // Cấu hình các sự kiện MQTT
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        client.connect({
+            onSuccess: onConnect,
+            onFailure: onConnectFailure
+        });
+
+        // Khi kết nối thành công
+        function onConnect() {
+            console.log("Kết nối thành công!");
+            isConnected = true; // Đánh dấu kết nối thành công
+            client.subscribe("traffic_signal_control"); // Đăng ký subscribe để nhận dữ liệu
+            document.getElementById("response").innerHTML = "Kết nối MQTT thành công!";
+        }
+
+        // Nếu kết nối thất bại
+        function onConnectFailure(responseObject) {
+            console.log("Kết nối không thành công: " + responseObject.errorMessage);
+            document.getElementById("response").innerHTML = "Kết nối không thành công. Vui lòng thử lại.";
+        }
+
+        // Khi mất kết nối
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.log("Mất kết nối: " + responseObject.errorMessage);
+                isConnected = false; // Cập nhật trạng thái kết nối
+                document.getElementById("response").innerHTML = "Mất kết nối với MQTT Broker.";
+            }
+        }
+
+        // Khi nhận được tin nhắn từ broker MQTT
+        function onMessageArrived(message) {
+            console.log("Dữ liệu nhận được từ MQTT: " + message.payloadString);
+            const responseDiv = document.getElementById("response");
+            responseDiv.innerHTML = "Phản hồi từ ESP32: " + message.payloadString;
+        }
+
+        // Hàm gửi trạng thái của các LED qua MQTT
+        function sendLedStates() {
+            const led1State = document.getElementById("led1State").value;
+            const led2State = document.getElementById("led2State").value;
+            const led3State = document.getElementById("led3State").value;
+
+            // Kiểm tra kết nối trước khi gửi
+            if (isConnected) {
+                const payload = {
+                    led1: led1State,
+                    led2: led2State,
+                    led3: led3State
+                };
+
+                const message = new Paho.MQTT.Message(JSON.stringify(payload));
+                message.destinationName = "traffic_signal_control"; // Topic của MQTT
+                client.send(message); // Gửi tin nhắn
+
+                alert("Trạng thái LED đã được gửi!");
+            } else {
+                alert("Chưa kết nối được với MQTT Broker. Vui lòng thử lại.");
+            }
+        }
+
+        // Vòng lặp kiểm tra kết nối và xử lý tin nhắn MQTT
+        function mqttLoop() {
+            if (isConnected) {
+                client.loop();  // Đảm bảo gọi loop để duy trì kết nối
+            }
+            setTimeout(mqttLoop, 100);  // Gọi lại sau 100ms
+        }
+
+        // Bắt đầu vòng lặp kiểm tra
+        mqttLoop();
+    </script>
+</body>
+
+</html>
